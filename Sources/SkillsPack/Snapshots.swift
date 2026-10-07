@@ -14,6 +14,7 @@ enum Snapshots {
         let screens: [(String, AnyView)] = [
             ("list", AnyView(RootView(route: .list))),
             ("detail", AnyView(RootView(route: .detail(detail)))),
+            ("health", AnyView(RootView(route: .health))),
             ("install", AnyView(InstallView(route: .constant(.install), initialURL: "tornikegomareli/Skills"))),
         ]
         for (name, screen) in screens {

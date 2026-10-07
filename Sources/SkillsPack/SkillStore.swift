@@ -10,6 +10,8 @@ final class SkillStore {
     private(set) var usage: [String: Usage] = [:]
     private(set) var sources: [String: SourceRecord] = [:]
     private(set) var updates: Set<String> = []
+    private(set) var issues: [HealthIssue] = []
+    private(set) var repos: [String] = []
     private(set) var isCountingUsage = false
     private(set) var isCheckingUpdates = false
     var message: String?
@@ -17,14 +19,53 @@ final class SkillStore {
 
     private var switches: Switches { Switches(paths: paths) }
 
+    init() {
+        Task { await checkDaily() }
+    }
+
     func reload() async {
         let paths = paths
-        let (skills, snapshot, sources) = await Task.detached(priority: .userInitiated) {
-            (Scanner(paths: paths).scan(), Switches(paths: paths).snapshot(), Installer(paths: paths).sources())
+        let (skills, snapshot, sources, issues, repos) = await Task.detached(priority: .userInitiated) {
+            let skills = Scanner(paths: paths).scan()
+            let installer = Installer(paths: paths)
+            return (skills, Switches(paths: paths).snapshot(), installer.sources(), Health(paths: paths).issues(in: skills), installer.trackedRepos())
         }.value
         self.skills = skills
         self.snapshot = snapshot
         self.sources = sources
+        self.issues = issues
+        self.repos = repos
+    }
+
+    /// Checks for updates once a day while the app runs.
+    private func checkDaily() async {
+        let key = "lastUpdateCheck"
+        while true {
+            let last = UserDefaults.standard.object(forKey: key) as? Date ?? .distantPast
+            if Date().timeIntervalSince(last) > 24 * 3600 {
+                await reload()
+                await checkUpdates(quiet: true)
+                UserDefaults.standard.set(Date(), forKey: key)
+            }
+            try? await Task.sleep(for: .seconds(3600))
+        }
+    }
+
+    /// Estimated tokens the agent loads every session for the skills that are on.
+    func contextTokens(for agent: Agent) -> (tokens: Int, skills: Int) {
+        let on = skills.filter { state($0, agent) == .on }
+        return (on.reduce(0) { $0 + ContextCost.tokens(for: $1) }, on.count)
+    }
+
+    /// Skills that are on somewhere and were not used in the last 90 days.
+    var unusedSkills: [Skill] {
+        let cutoff = Date().addingTimeInterval(-90 * 24 * 3600)
+        return skills.filter { skill in
+            Agent.allCases.contains { state(skill, $0) == .on }
+                && (usage(of: skill).lastUsed ?? .distantPast) < cutoff
+                && ContextCost.tokens(for: skill) > 0
+        }
+        .sorted { ContextCost.tokens(for: $0) > ContextCost.tokens(for: $1) }
     }
 
     func countUsage() async {
@@ -55,6 +96,52 @@ final class SkillStore {
         }
     }
 
+    func turnOffEverywhere(_ skills: [Skill]) async {
+        let targets = skills.flatMap { skill in Agent.allCases.filter { state(skill, $0) == .on }.map { (skill, $0) } }
+        await run("Turned off \(skills.count == 1 ? skills[0].name : "\(skills.count) skills") everywhere.") { paths in
+            let switches = Switches(paths: paths)
+            for (skill, agent) in targets { try switches.setEnabled(false, skill: skill, agent: agent) }
+        }
+    }
+
+    func fix(_ issues: [HealthIssue]) async {
+        await run(issues.count == 1 ? "Fixed: \(issues[0].title)." : "Fixed \(issues.count) problems.") { paths in
+            let health = Health(paths: paths)
+            for issue in issues { try health.fix(issue) }
+        }
+    }
+
+    func addRepo(_ input: String) async {
+        guard SourceRef.parse(input) != nil else {
+            error = "Enter a GitHub URL, owner/repo, or a git URL."
+            return
+        }
+        let repos = repos + [input.trimmingCharacters(in: .whitespacesAndNewlines)]
+        await run("Added \(input).") { try Installer(paths: $0).saveTrackedRepos(repos) }
+    }
+
+    func removeRepo(_ repo: String) async {
+        let repos = repos.filter { $0 != repo }
+        await run("Removed \(repo).") { try Installer(paths: $0).saveTrackedRepos(repos) }
+    }
+
+    /// Links skills with no source to same-named skills in the tracked repos.
+    func matchSources() async {
+        let refs = repos.compactMap(SourceRef.parse)
+        let skills = skills
+        let paths = paths
+        do {
+            let matched = try await Task.detached(priority: .userInitiated) {
+                try Installer(paths: paths).matchSources(in: refs, for: skills)
+            }.value
+            message = matched.isEmpty ? "No new matches in your repos." : "Linked \(matched.count) skills to a source. Check for updates to compare them."
+            error = nil
+        } catch {
+            self.error = error.localizedDescription
+        }
+        await reload()
+    }
+
     func delete(_ skill: Skill) async {
         await run("Deleted \(skill.name). Folders are in the Trash.") { paths in
             try Installer(paths: paths).delete(skill)
@@ -81,7 +168,7 @@ final class SkillStore {
     }
 
     /// Clones each known source once and compares it with the installed copies.
-    func checkUpdates() async {
+    func checkUpdates(quiet: Bool = false) async {
         guard !isCheckingUpdates else { return }
         isCheckingUpdates = true
         let candidates = skills.compactMap { skill in sources[skill.name].map { (skill, $0) } }.filter { $0.0.isDeletable }
@@ -107,6 +194,7 @@ final class SkillStore {
         }.value
         updates = found
         isCheckingUpdates = false
+        if quiet { return }
         message = found.isEmpty ? "All \(candidates.count) skills with a known source are up to date." : "\(found.count) updates available."
         error = failures.isEmpty ? nil : "Could not check " + failures.joined(separator: "; ")
     }

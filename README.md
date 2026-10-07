@@ -6,6 +6,10 @@ A macOS menu bar app that manages agent skills for Claude Code, Codex, and pi.
 - Turn a skill on or off for one agent. SkillsPack writes each agent's own setting, so files never move.
 - Install skills from a URL, update them from their source, and delete them (folders go to the Trash).
 - Read a skill's `SKILL.md` without leaving the menu bar.
+- Health: find broken links, skills in folders no agent reads, and copies of one skill that differ, then fix them in one click.
+- Context cost: see about how many tokens each agent loads every session for skill descriptions, and turn off skills you have not used in 90 days.
+- Source repos: add repos once, and SkillsPack links skills with no known source to same-named skills in them, so they can update.
+- Checks for updates once a day and shows the number of updates next to the menu bar icon.
 
 ## Build and run
 
@@ -55,5 +59,6 @@ The first count reads every log. After that, only new or changed logs are read.
 SkillsPack stores its own data in `~/Library/Application Support/SkillsPack`:
 
 - `sources.json`: where each installed skill came from.
+- `repos.json`: the repos used to match sources.
 - `usage-cache.json`: usage counts per log file.
 - `backups/`: the 20 newest copies of each agent config file before SkillsPack changed it.

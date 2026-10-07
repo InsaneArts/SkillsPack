@@ -74,8 +74,15 @@ struct SkillListView: View {
             } else {
                 ScrollView {
                     LazyVStack(spacing: 0) {
+                        if !store.issues.isEmpty, status == .any, query.isEmpty {
+                            banner(icon: "exclamationmark.triangle.fill", color: .orange,
+                                   title: "\(store.issues.count) \(store.issues.count == 1 ? "Problem" : "Problems") Found",
+                                   detail: "Broken links, skills no agent loads, or copies that differ.") { route = .health }
+                        }
                         if !store.updates.isEmpty, status == .any, query.isEmpty {
-                            updatesBanner
+                            banner(icon: "arrow.down.circle.fill", color: .blue,
+                                   title: "\(store.updates.count) \(store.updates.count == 1 ? "Update" : "Updates") Available",
+                                   detail: "Show skills with a newer version at their source.") { status = .updates }
                         }
                         ForEach(skills) { skill in
                             SkillRow(skill: skill) { route = .detail(skill.name) }
@@ -98,6 +105,7 @@ struct SkillListView: View {
                 }
                 Spacer()
                 HStack(spacing: 6) {
+                    CircleButton(systemImage: "stethoscope", help: "Health and context") { route = .health }
                     CircleButton(systemImage: "plus", help: "Add skills from a URL") { route = .install }
                     moreMenu
                 }
@@ -153,6 +161,7 @@ struct SkillListView: View {
                 ForEach(SkillSort.allCases) { Text($0.rawValue).tag($0) }
             }
             Divider()
+            Button("Health and Context") { route = .health }
             Button("Check for Updates") { Task { await store.checkUpdates() } }
                 .disabled(store.isCheckingUpdates)
             Button("Recount Usage") { Task { await store.countUsage() } }
@@ -172,21 +181,19 @@ struct SkillListView: View {
         .fixedSize()
     }
 
-    var updatesBanner: some View {
-        Button {
-            status = .updates
-        } label: {
+    func banner(icon: String, color: Color, title: String, detail: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
             HStack(spacing: 10) {
-                Image(systemName: "arrow.down.circle.fill").font(.system(size: 20)).foregroundStyle(.blue)
+                Image(systemName: icon).font(.system(size: 20)).foregroundStyle(color)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("\(store.updates.count) \(store.updates.count == 1 ? "Update" : "Updates") Available").font(.system(size: 13, weight: .medium))
-                    Text("Show skills with a newer version at their source.").font(.system(size: 11)).foregroundStyle(.secondary)
+                    Text(title).font(.system(size: 13, weight: .medium))
+                    Text(detail).font(.system(size: 11)).foregroundStyle(.secondary)
                 }
                 Spacer()
                 Image(systemName: "chevron.right").font(.system(size: 11, weight: .semibold)).foregroundStyle(.tertiary)
             }
             .padding(10)
-            .background(.blue.opacity(0.1), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .background(color.opacity(0.1), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

@@ -163,6 +163,8 @@ struct SkillDetailView: View {
             }
             CardDivider()
             InfoRow(label: "Invocation", value: skill.userInvocableOnly ? "Only when you call it" : "You or the agent")
+            CardDivider()
+            InfoRow(label: "Context cost", value: skill.userInvocableOnly ? "None" : "≈ \(ContextCost.tokens(for: skill)) tokens per session")
         }
     }
 

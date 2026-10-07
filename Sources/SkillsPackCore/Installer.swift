@@ -134,6 +134,43 @@ public struct Installer: Sendable {
         try saveManifest(manifest)
     }
 
+    // MARK: Tracked repos
+
+    var reposURL: URL { paths.appSupport.appending(path: "repos.json") }
+
+    /// Repos that `matchSources` searches for skills with no known source.
+    public func trackedRepos() -> [String] {
+        (try? JSONDecoder().decode([String].self, from: Data(contentsOf: reposURL))) ?? []
+    }
+
+    public func saveTrackedRepos(_ repos: [String]) throws {
+        try FileManager.default.createDirectory(at: paths.appSupport, withIntermediateDirectories: true)
+        try JSONEncoder().encode(repos).write(to: reposURL, options: .atomic)
+    }
+
+    /// Links each skill with no known source to a skill of the same name in the given repos.
+    /// The first repo that has the name wins. Returns the names that got a source.
+    public func matchSources(in repos: [SourceRef], for skills: [Skill]) throws -> [String] {
+        var known = sources()
+        var manifest = manifest()
+        var matched: [String] = []
+        for repo in repos {
+            let fetched = try fetch(repo)
+            defer { discard(fetched) }
+            for skill in skills where known[skill.name] == nil && skill.isDeletable {
+                guard let found = fetched.skills.first(where: { $0.name == skill.baseName }) else { continue }
+                var source = repo
+                source.path = found.path.isEmpty ? nil : found.path
+                let record = SourceRecord(source: source, commit: nil, installedAt: nil)
+                known[skill.name] = record
+                manifest[skill.name] = record
+                matched.append(skill.name)
+            }
+        }
+        try saveManifest(manifest)
+        return matched
+    }
+
     // MARK: Fetch
 
     public func fetch(_ source: SourceRef) throws -> Fetched {

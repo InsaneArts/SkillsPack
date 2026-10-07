@@ -15,10 +15,16 @@ struct SkillsPackApp: App {
     }
 
     var body: some Scene {
-        MenuBarExtra("SkillsPack", systemImage: "shippingbox") {
+        MenuBarExtra {
             RootView()
                 .environment(store)
                 .frame(width: 400, height: 600)
+        } label: {
+            // The number of updates sits next to the icon, like a badge.
+            HStack(spacing: 2) {
+                Image(systemName: "shippingbox")
+                if !store.updates.isEmpty { Text("\(store.updates.count)") }
+            }
         }
         .menuBarExtraStyle(.window)
     }
@@ -28,6 +34,7 @@ enum Route: Equatable {
     case list
     case detail(String)
     case install
+    case health
 }
 
 struct RootView: View {
@@ -52,6 +59,8 @@ struct RootView: View {
                     }
                 case .install:
                     InstallView(route: $route)
+                case .health:
+                    HealthView(route: $route)
                 }
             }
             .transition(.opacity)

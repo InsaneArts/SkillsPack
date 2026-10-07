@@ -100,9 +100,9 @@ struct SkillDetailView: View {
     var statsStrip: some View {
         let usage = store.usage(of: skill)
         return HStack(spacing: 0) {
-            stat("By You", "\(usage.byUser)")
+            stat("90 Days", "\(usage.recent)")
             Divider().frame(height: 30)
-            stat("By Agent", "\(usage.byAgent)")
+            stat("All Time", "\(usage.total)", caption: "\(usage.byUser) you · \(usage.byAgent) agent")
             Divider().frame(height: 30)
             stat("Last Used", usage.lastUsed.map { $0.formatted(.relative(presentation: .named, unitsStyle: .abbreviated)) } ?? "Never")
         }
@@ -110,10 +110,11 @@ struct SkillDetailView: View {
         .background(.fill.quaternary, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
-    func stat(_ label: String, _ value: String) -> some View {
+    func stat(_ label: String, _ value: String, caption: String? = nil) -> some View {
         VStack(spacing: 3) {
             Text(label.uppercased()).font(.system(size: 9, weight: .semibold)).foregroundStyle(.secondary)
             Text(value).font(.system(size: 15, weight: .semibold).monospacedDigit()).lineLimit(1).minimumScaleFactor(0.7)
+            if let caption { Text(caption).font(.system(size: 9)).foregroundStyle(.secondary) }
         }
         .frame(maxWidth: .infinity)
     }

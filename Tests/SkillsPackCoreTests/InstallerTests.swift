@@ -138,6 +138,18 @@ import Testing
         #expect(counts.count == 1)
     }
 
+    @Test func recentCountsOnlySessionsFromTheLast90Days() throws {
+        let home = try TempHome()
+        let old = home.paths.claudeSessions.appending(path: "p/old.jsonl")
+        let new = home.paths.claudeSessions.appending(path: "p/new.jsonl")
+        try home.write(#"{"name":"Skill","input":{"skill":"tdd"}}"# + "\n", to: old)
+        try home.write(#"{"name":"Skill","input":{"skill":"tdd"}}"# + "\n", to: new)
+        try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSinceNow: -120 * 24 * 3600)], ofItemAtPath: old.path)
+        let usage = try #require(UsageScanner(paths: home.paths).scan()["tdd"])
+        #expect(usage.total == 2)
+        #expect(usage.recent == 1)
+    }
+
     @Test func cacheSkipsUnchangedFiles() throws {
         let home = try TempHome()
         let log = home.paths.claudeSessions.appending(path: "p/s.jsonl")

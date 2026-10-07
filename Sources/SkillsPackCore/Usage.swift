@@ -4,11 +4,17 @@ public struct Usage: Codable, Sendable, Equatable {
     public var byUser = 0
     public var byAgent = 0
     public var lastUsed: Date?
+    /// Uses in sessions from the last 90 days. Computed on each scan, not cached.
+    public var recent = 0
 
-    public init(byUser: Int = 0, byAgent: Int = 0, lastUsed: Date? = nil) {
+    /// `recent` stays out of the cache, so it never goes stale.
+    enum CodingKeys: String, CodingKey { case byUser, byAgent, lastUsed }
+
+    public init(byUser: Int = 0, byAgent: Int = 0, lastUsed: Date? = nil, recent: Int = 0) {
         self.byUser = byUser
         self.byAgent = byAgent
         self.lastUsed = lastUsed
+        self.recent = recent
     }
 
     public var total: Int { byUser + byAgent }
@@ -56,9 +62,14 @@ public struct UsageScanner: Sendable {
         try? FileManager.default.createDirectory(at: paths.appSupport, withIntermediateDirectories: true)
         try? JSONEncoder().encode(entries).write(to: cacheURL, options: .atomic)
 
+        // A log's modification date is when its session last ran.
+        let cutoff = Date().addingTimeInterval(-90 * 24 * 3600).timeIntervalSince1970
         var totals: [String: Usage] = [:]
         for entry in entries.values {
-            for (name, usage) in entry.counts { totals[name, default: Usage()].add(usage) }
+            for (name, usage) in entry.counts {
+                totals[name, default: Usage()].add(usage)
+                if entry.modified >= cutoff { totals[name, default: Usage()].recent += usage.total }
+            }
         }
         return totals
     }

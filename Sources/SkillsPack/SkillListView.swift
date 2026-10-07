@@ -21,7 +21,7 @@ enum StatusFilter: String, CaseIterable, Identifiable {
 }
 
 enum SkillSort: String, CaseIterable, Identifiable {
-    case usage = "Most Used"
+    case usage = "Most Used (90 Days)"
     case recent = "Recently Used"
     case name = "Name"
 
@@ -51,8 +51,11 @@ struct SkillListView: View {
         }
         switch sort {
         case .usage:
-            // Most used first, then by name.
-            return filtered.sorted { (store.usage(of: $0).total, $1.name) > (store.usage(of: $1).total, $0.name) }
+            // Most used in the last 90 days first, then all-time uses, then name.
+            return filtered.sorted {
+                let a = store.usage(of: $0), b = store.usage(of: $1)
+                return (a.recent, a.total, $1.name) > (b.recent, b.total, $0.name)
+            }
         case .recent:
             return filtered.sorted { (store.usage(of: $0).lastUsed ?? .distantPast) > (store.usage(of: $1).lastUsed ?? .distantPast) }
         case .name:
@@ -246,9 +249,10 @@ struct SkillRow: View {
                 Spacer(minLength: 6)
                 VStack(alignment: .trailing, spacing: 4) {
                     AgentDots(skill: skill)
-                    Text(usage.total == 0 ? "Unused" : "\(usage.total) \(usage.total == 1 ? "use" : "uses")")
+                    Text(usageLabel(usage))
                         .font(.system(size: 10).monospacedDigit())
                         .foregroundStyle(.tertiary)
+                        .help("\(usage.recent) uses in the last 90 days, \(usage.total) in total")
                 }
             }
             .padding(.horizontal, 8)
@@ -258,6 +262,13 @@ struct SkillRow: View {
         .buttonStyle(.plain)
         .hoverHighlight()
         .contextMenu { contextMenu }
+    }
+
+    /// Recent uses, or when the skill was last used if that was more than 90 days ago.
+    func usageLabel(_ usage: Usage) -> String {
+        if usage.recent > 0 { return "\(usage.recent) \(usage.recent == 1 ? "use" : "uses")" }
+        guard let last = usage.lastUsed else { return "Unused" }
+        return "Last " + last.formatted(.dateTime.month(.abbreviated).year())
     }
 
     @ViewBuilder

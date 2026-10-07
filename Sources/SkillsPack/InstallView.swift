@@ -12,6 +12,8 @@ struct InstallView: View {
     @State private var error: String?
     /// Debug snapshots start with a URL and fetch it on appear.
     var initialURL = ""
+    var autoFetch = true
+    var initialSelection: Set<String> = []
 
     var body: some View {
         VStack(spacing: 0) {
@@ -39,7 +41,7 @@ struct InstallView: View {
         .onAppear {
             if !initialURL.isEmpty, url.isEmpty {
                 url = initialURL
-                fetch()
+                if autoFetch { fetch() }
             }
         }
     }
@@ -99,7 +101,7 @@ struct InstallView: View {
                     }
                     .buttonStyle(.plain)
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(.tint)
                 }
             }
             .padding(.horizontal, 4)
@@ -112,7 +114,7 @@ struct InstallView: View {
                         HStack(spacing: 10) {
                             Image(systemName: selected.contains(skill.id) ? "checkmark.circle.fill" : "circle")
                                 .font(.system(size: 16))
-                                .foregroundStyle(selected.contains(skill.id) ? Color.accentColor : Color.secondary.opacity(0.5))
+                                .foregroundStyle(selected.contains(skill.id) ? AnyShapeStyle(.tint) : AnyShapeStyle(Color.secondary.opacity(0.5)))
                             SkillIcon(name: skill.name, size: 26)
                             VStack(alignment: .leading, spacing: 1) {
                                 HStack(spacing: 5) {
@@ -191,6 +193,9 @@ struct InstallView: View {
                 withAnimation(.snappy) {
                     fetched = result
                     selected = result.skills.count == 1 ? [result.skills[0].id] : []
+                    if !initialSelection.isEmpty {
+                        selected = Set(result.skills.filter { initialSelection.contains($0.name) }.map(\.id))
+                    }
                 }
             } catch {
                 self.error = error.localizedDescription

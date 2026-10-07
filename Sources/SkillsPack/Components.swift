@@ -120,7 +120,7 @@ struct BackBar<Trailing: View>: View {
                     Image(systemName: "chevron.left").fontWeight(.semibold)
                     Text("Skills")
                 }
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(.tint)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -160,7 +160,8 @@ struct Toast: View {
             .transition(.move(edge: .bottom).combined(with: .opacity))
             .task(id: text) {
                 guard error == nil else { return }
-                try? await Task.sleep(for: .seconds(3))
+                // A cancelled wait means the toast went away or changed; leave the message alone.
+                guard (try? await Task.sleep(for: .seconds(3))) != nil else { return }
                 withAnimation { store.message = nil }
             }
         }

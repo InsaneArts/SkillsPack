@@ -11,6 +11,11 @@ struct SkillsPackApp: App {
             let dir = URL(filePath: CommandLine.arguments[index + 1])
             Task { @MainActor in await Snapshots.render(to: dir) }
         }
+        if let index = CommandLine.arguments.firstIndex(of: "--demo-states"), index + 2 < CommandLine.arguments.count {
+            let out = URL(filePath: CommandLine.arguments[index + 1])
+            let home = URL(filePath: CommandLine.arguments[index + 2])
+            Task { @MainActor in await DemoStates.run(out: out, home: home) }
+        }
         #endif
     }
 
@@ -40,9 +45,11 @@ enum Route: Equatable {
 struct RootView: View {
     @Environment(SkillStore.self) private var store
     @State private var route: Route
+    private let agentFilter: AgentFilter
 
-    init(route: Route = .list) {
+    init(route: Route = .list, agentFilter: AgentFilter = .all) {
         _route = State(initialValue: route)
+        self.agentFilter = agentFilter
     }
 
     var body: some View {
@@ -50,12 +57,12 @@ struct RootView: View {
             Group {
                 switch route {
                 case .list:
-                    SkillListView(route: $route)
+                    SkillListView(route: $route, agentFilter: agentFilter)
                 case .detail(let name):
                     if let skill = store.skills.first(where: { $0.name == name }) {
                         SkillDetailView(skill: skill, route: $route)
                     } else {
-                        SkillListView(route: $route)
+                        SkillListView(route: $route, agentFilter: agentFilter)
                     }
                 case .install:
                     InstallView(route: $route)

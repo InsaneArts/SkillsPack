@@ -58,7 +58,7 @@ struct SkillDetailView: View {
                         Button(expanded ? "Less" : "More") { withAnimation(.snappy) { expanded.toggle() } }
                             .buttonStyle(.plain)
                             .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(Color.accentColor)
+                            .foregroundStyle(.tint)
                     }
                 }
             }
@@ -332,7 +332,7 @@ private struct AgentRow: View {
     }
 
     func location(_ installation: Installation) -> String {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let home = store.paths.home.path
         let path = installation.dir.path.hasPrefix(home) ? "~" + installation.dir.path.dropFirst(home.count) : installation.dir.path
         return installation.isSymlink ? path + " (link)" : path
     }

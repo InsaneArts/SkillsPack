@@ -4,7 +4,9 @@ import SkillsPackCore
 /// App state. Every file operation runs off the main thread, then the store reloads from disk.
 @MainActor @Observable
 final class SkillStore {
-    let paths = Paths()
+    let paths: Paths
+    /// Where session logs are read from. The demo film reads real logs while using a demo home.
+    private let usagePaths: Paths
     private(set) var skills: [Skill] = []
     private(set) var snapshot = Switches.Snapshot.empty
     private(set) var usage: [String: Usage] = [:]
@@ -19,7 +21,10 @@ final class SkillStore {
 
     private var switches: Switches { Switches(paths: paths) }
 
-    init() {
+    init(paths: Paths = Paths(), usagePaths: Paths? = nil, checksDaily: Bool = true) {
+        self.paths = paths
+        self.usagePaths = usagePaths ?? paths
+        guard checksDaily else { return }
         Task { await checkDaily() }
     }
 
@@ -71,7 +76,7 @@ final class SkillStore {
     func countUsage() async {
         guard !isCountingUsage else { return }
         isCountingUsage = true
-        let paths = paths
+        let paths = usagePaths
         usage = await Task.detached(priority: .userInitiated) { UsageScanner(paths: paths).scan() }.value
         isCountingUsage = false
     }

@@ -32,9 +32,14 @@ struct SkillListView: View {
     @Environment(SkillStore.self) private var store
     @Binding var route: Route
     @State private var query = ""
-    @State private var agentFilter = AgentFilter.all
+    @State private var agentFilter: AgentFilter
     @State private var status = StatusFilter.any
     @State private var sort = SkillSort.usage
+
+    init(route: Binding<Route>, agentFilter: AgentFilter = .all) {
+        _route = route
+        _agentFilter = State(initialValue: agentFilter)
+    }
 
     var visible: [Skill] {
         let words = query.lowercased().split(separator: " ")

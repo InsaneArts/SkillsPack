@@ -63,7 +63,7 @@ struct HealthView: View {
                         Text("Fix All \(store.issues.count) Problems").font(.system(size: 13)).frame(maxWidth: .infinity).frame(height: 34).contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(.tint)
                     .disabled(working)
                 }
             }
@@ -144,7 +144,7 @@ struct HealthView: View {
                     Text("Turn Off All \(skills.count) Everywhere").font(.system(size: 13)).frame(maxWidth: .infinity).frame(height: 34).contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(.tint)
                 .disabled(working)
             }
         }

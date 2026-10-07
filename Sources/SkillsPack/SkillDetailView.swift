@@ -7,38 +7,27 @@ struct SkillDetailView: View {
     @Binding var route: Route
     @State private var confirmDelete = false
     @State private var preview = ""
+    @State private var showPreview = false
+    @State private var expanded = false
     @State private var working = false
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Button { route = .list } label: { Label("Skills", systemImage: "chevron.left") }
-                    .buttonStyle(.borderless)
-                Spacer()
-            }
-            .padding(10)
-            Divider()
+            BackBar(action: { route = .list }) { moreMenu }
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(skill.name).font(.title3.bold()).textSelection(.enabled)
-                        if skill.userInvocableOnly {
-                            Text("Only runs when you call it.").font(.caption).foregroundStyle(.secondary)
-                        }
-                        if !skill.description.isEmpty {
-                            Text(skill.description).foregroundStyle(.secondary).textSelection(.enabled)
-                        }
-                    }
-                    usageSection
-                    agentsSection
-                    sourceSection
-                    previewSection
-                    if skill.isDeletable { deleteSection }
+                VStack(alignment: .leading, spacing: 18) {
+                    header
+                    statsStrip
+                    agentsCard
+                    infoCard
+                    instructionsCard
+                    if skill.isDeletable { deleteCard }
                 }
-                .padding(14)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.top, 4)
+                .padding(.bottom, 60)
             }
-            StatusBar()
+            .scrollIndicators(.never)
         }
         .task(id: skill.name) {
             guard let file = skill.installations.first?.skillFile else { return }
@@ -46,72 +35,134 @@ struct SkillDetailView: View {
         }
     }
 
-    var usageSection: some View {
+    // MARK: Header
+
+    var header: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center, spacing: 14) {
+                SkillIcon(name: skill.name, size: 60)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(skill.name).font(.system(size: 17, weight: .semibold)).lineLimit(2).textSelection(.enabled)
+                    Text(sourceLine).font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(1)
+                    primaryButton.padding(.top, 3)
+                }
+            }
+            if !skill.description.isEmpty {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(skill.description)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(expanded ? nil : 3)
+                        .textSelection(.enabled)
+                    if skill.description.count > 160 {
+                        Button(expanded ? "Less" : "More") { withAnimation(.snappy) { expanded.toggle() } }
+                            .buttonStyle(.plain)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(Color.accentColor)
+                    }
+                }
+            }
+        }
+    }
+
+    var sourceLine: String {
+        if let plugin = pluginInfo { return "Claude plugin · \(plugin.id.split(separator: "@").first ?? "")" }
+        if let record = store.sources[skill.name] { return record.source.display }
+        if skill.installations.allSatisfy({ $0.root.kind == .system }) { return "Built into Codex" }
+        if skill.installations.allSatisfy(\.isSymlink) { return "Linked from another folder" }
+        return "Local skill"
+    }
+
+    @ViewBuilder
+    var primaryButton: some View {
+        if pluginInfo != nil || store.sources[skill.name] != nil {
+            let hasUpdate = store.updates.contains(skill.name)
+            Button {
+                act { await store.update(skill) }
+            } label: {
+                Group {
+                    if working { ProgressView().controlSize(.small) } else { Text(hasUpdate ? "Update" : pluginInfo != nil ? "Update Plugin" : "Reinstall") }
+                }
+                .font(.system(size: 12, weight: .semibold))
+                .frame(minWidth: 72)
+            }
+            .buttonStyle(.borderedProminent)
+            .buttonBorderShape(.capsule)
+            .tint(hasUpdate ? .blue : .secondary.opacity(0.35))
+            .foregroundStyle(hasUpdate ? .white : .primary)
+            .controlSize(.small)
+            .disabled(working || (pluginInfo == nil && !skill.isDeletable))
+        }
+    }
+
+    // MARK: Stats
+
+    var statsStrip: some View {
         let usage = store.usage(of: skill)
-        return Section("Usage") {
-            HStack(spacing: 18) {
-                stat("\(usage.byUser)", "by you")
-                stat("\(usage.byAgent)", "by the agent")
-                stat(usage.lastUsed.map { $0.formatted(.relative(presentation: .named)) } ?? "never", "last used")
+        return HStack(spacing: 0) {
+            stat("By You", "\(usage.byUser)")
+            Divider().frame(height: 30)
+            stat("By Agent", "\(usage.byAgent)")
+            Divider().frame(height: 30)
+            stat("Last Used", usage.lastUsed.map { $0.formatted(.relative(presentation: .named, unitsStyle: .abbreviated)) } ?? "Never")
+        }
+        .padding(.vertical, 10)
+        .background(.fill.quaternary, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    func stat(_ label: String, _ value: String) -> some View {
+        VStack(spacing: 3) {
+            Text(label.uppercased()).font(.system(size: 9, weight: .semibold)).foregroundStyle(.secondary)
+            Text(value).font(.system(size: 15, weight: .semibold).monospacedDigit()).lineLimit(1).minimumScaleFactor(0.7)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    // MARK: Agents
+
+    var agentsCard: some View {
+        Card(title: "AGENTS") {
+            ForEach(Array(Agent.allCases.enumerated()), id: \.element) { index, agent in
+                if index > 0 { CardDivider(inset: 48) }
+                AgentRow(skill: skill, agent: agent)
             }
         }
     }
 
-    func stat(_ value: String, _ label: String) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text(value).font(.headline.monospacedDigit())
-            Text(label).font(.caption).foregroundStyle(.secondary)
-        }
-    }
+    // MARK: Information
 
-    var agentsSection: some View {
-        Section("Agents") {
-            VStack(alignment: .leading, spacing: 10) {
-                ForEach(Agent.allCases, id: \.self) { agent in
-                    HStack(alignment: .top, spacing: 10) {
-                        AgentChip(skill: skill, agent: agent)
-                        VStack(alignment: .leading, spacing: 2) {
-                            let installations = skill.installations(for: agent)
-                            if installations.isEmpty {
-                                Text("Not installed").font(.caption).foregroundStyle(.secondary)
-                            }
-                            ForEach(installations) { installation in
-                                PathLine(installation: installation)
-                            }
-                        }
-                    }
+    var infoCard: some View {
+        Card(title: "INFORMATION") {
+            if let plugin = pluginInfo {
+                InfoRow(label: "Plugin", value: plugin.id)
+                CardDivider()
+                InfoRow(label: "Version", value: plugin.version)
+            } else if let record = store.sources[skill.name] {
+                InfoRow(label: "Source", value: record.source.display)
+                if let ref = record.source.ref {
+                    CardDivider()
+                    InfoRow(label: "Branch", value: ref)
                 }
-            }
-        }
-    }
-
-    var sourceSection: some View {
-        Section("Source") {
-            VStack(alignment: .leading, spacing: 6) {
-                if let plugin = pluginInfo {
-                    Text("Claude plugin \(plugin.id), version \(plugin.version)").font(.callout)
-                    Button("Update plugin") { act { await store.update(skill) } }.disabled(working)
-                } else if let record = store.sources[skill.name] {
-                    Text(record.source.display).font(.callout).textSelection(.enabled)
-                    HStack(spacing: 8) {
-                        if let ref = record.source.ref { Text("ref \(ref)") }
-                        if let commit = record.commit { Text("commit \(commit.prefix(7))") }
-                        if let date = record.installedAt { Text("installed \(date.formatted(date: .abbreviated, time: .omitted))") }
-                    }
-                    .font(.caption)
+                if let commit = record.commit {
+                    CardDivider()
+                    InfoRow(label: "Commit", value: String(commit.prefix(7)), monospaced: true)
+                }
+                if let date = record.installedAt {
+                    CardDivider()
+                    InfoRow(label: "Installed", value: date.formatted(date: .abbreviated, time: .omitted))
+                }
+            } else {
+                InfoRow(label: "Source", value: "Unknown")
+                CardDivider()
+                Text("Add this skill again from its URL to get updates.")
+                    .font(.system(size: 11))
                     .foregroundStyle(.secondary)
-                    Button(store.updates.contains(skill.name) ? "Install update" : "Update now") {
-                        act { await store.update(skill) }
-                    }
-                    .disabled(working || !skill.isDeletable)
-                } else if skill.installations.allSatisfy({ $0.root.kind == .system }) {
-                    Text("Ships with Codex.").font(.callout).foregroundStyle(.secondary)
-                } else if skill.installations.allSatisfy(\.isSymlink) {
-                    Text("Linked from another folder. Update it there.").font(.callout).foregroundStyle(.secondary)
-                } else {
-                    Text("Unknown. Install it again from its URL to track updates.").font(.callout).foregroundStyle(.secondary)
-                }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
             }
+            CardDivider()
+            InfoRow(label: "Invocation", value: skill.userInvocableOnly ? "Only when you call it" : "You or the agent")
         }
     }
 
@@ -122,38 +173,107 @@ struct SkillDetailView: View {
         return nil
     }
 
-    var previewSection: some View {
-        Section("SKILL.md") {
-            ScrollView {
-                Text(preview)
-                    .font(.system(size: 11, design: .monospaced))
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(8)
+    // MARK: Instructions
+
+    var instructionsCard: some View {
+        Card(title: "INSTRUCTIONS") {
+            Button {
+                withAnimation(.snappy) { showPreview.toggle() }
+            } label: {
+                HStack {
+                    Image(systemName: "doc.text").foregroundStyle(.secondary)
+                    Text("SKILL.md").font(.system(size: 13))
+                    Spacer()
+                    Text("\(preview.split(separator: "\n", omittingEmptySubsequences: false).count) lines").font(.system(size: 11)).foregroundStyle(.secondary)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                        .rotationEffect(.degrees(showPreview ? 90 : 0))
+                }
+                .padding(.horizontal, 12)
+                .frame(height: 36)
+                .contentShape(Rectangle())
             }
-            .frame(height: 220)
-            .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+            .buttonStyle(.plain)
+            if showPreview {
+                CardDivider(inset: 0)
+                ScrollView {
+                    Text(preview)
+                        .font(.system(size: 11, design: .monospaced))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(12)
+                }
+                .frame(height: 240)
+            }
         }
     }
 
-    var deleteSection: some View {
-        HStack {
+    // MARK: Delete
+
+    var deleteCard: some View {
+        Card {
             if confirmDelete {
-                Text("Delete every writable copy?").font(.callout)
-                Spacer()
-                Button("Cancel") { confirmDelete = false }
-                Button("Delete", role: .destructive) {
-                    act {
-                        await store.delete(skill)
-                        route = .list
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Delete “\(skill.name)”?").font(.system(size: 13, weight: .semibold))
+                    Text("Its folders move to the Trash. Symlinks are removed, and their targets stay.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                    HStack {
+                        Spacer()
+                        Button("Cancel") { confirmDelete = false }.controlSize(.small)
+                        Button("Delete", role: .destructive) {
+                            act {
+                                await store.delete(skill)
+                                route = .list
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.red)
+                        .controlSize(.small)
+                        .disabled(working)
                     }
                 }
-                .disabled(working)
+                .padding(12)
             } else {
-                Button("Delete skill", role: .destructive) { confirmDelete = true }
-                Spacer()
+                Button {
+                    withAnimation(.snappy) { confirmDelete = true }
+                } label: {
+                    Text("Delete Skill…")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.red)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 36)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
             }
         }
+    }
+
+    var moreMenu: some View {
+        Menu {
+            if let first = skill.installations.first {
+                Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([first.skillFile]) }
+                Button("Copy Path") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(first.dir.path, forType: .string)
+                }
+            }
+            if skill.isDeletable {
+                Divider()
+                Button("Delete Skill…", role: .destructive) { withAnimation(.snappy) { confirmDelete = true } }
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 12, weight: .semibold))
+                .frame(width: 26, height: 26)
+                .background(.fill.tertiary, in: Circle())
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
     }
 
     func act(_ work: @escaping () async -> Void) {
@@ -165,52 +285,72 @@ struct SkillDetailView: View {
     }
 }
 
-private struct Section<Content: View>: View {
-    let title: String
-    @ViewBuilder let content: Content
-
-    init(_ title: String, @ViewBuilder content: () -> Content) {
-        self.title = title
-        self.content = content()
-    }
+/// One agent: an icon, where the skill lives, and a switch (or Install when it is missing).
+private struct AgentRow: View {
+    @Environment(SkillStore.self) private var store
+    let skill: Skill
+    let agent: Agent
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(.caption.weight(.semibold)).foregroundStyle(.secondary).textCase(.uppercase)
-            content
-        }
-    }
-}
-
-private struct PathLine: View {
-    let installation: Installation
-
-    var body: some View {
-        HStack(spacing: 4) {
-            Text(display(installation.dir))
-                .font(.caption.monospaced())
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .help(installation.dir.path)
-            if installation.isSymlink {
-                Text("→ \(display(installation.resolvedDir))")
-                    .font(.caption.monospaced())
+        let state = store.state(skill, agent)
+        let installations = skill.installations(for: agent)
+        HStack(spacing: 10) {
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(agent.color.gradient)
+                .frame(width: 26, height: 26)
+                .overlay { Image(systemName: agent.symbol).font(.system(size: 11, weight: .bold)).foregroundStyle(.white) }
+            VStack(alignment: .leading, spacing: 1) {
+                Text(agent.title).font(.system(size: 13))
+                Text(installations.first.map { location($0) } ?? "Not installed")
+                    .font(.system(size: 10))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
+                    .help(installations.map(\.dir.path).joined(separator: "\n"))
             }
-            Button {
-                NSWorkspace.shared.activateFileViewerSelecting([installation.skillFile])
-            } label: {
-                Image(systemName: "folder")
+            Spacer(minLength: 8)
+            if state == .notInstalled {
+                Button("Install") { Task { await store.toggle(skill, agent) } }
+                    .buttonStyle(.bordered)
+                    .buttonBorderShape(.capsule)
+                    .controlSize(.small)
+            } else {
+                Toggle("", isOn: Binding(
+                    get: { state == .on },
+                    set: { _ in Task { await store.toggle(skill, agent) } }))
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .labelsHidden()
+                .tint(agent.color)
             }
-            .buttonStyle(.borderless)
-            .help("Show in Finder")
         }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
     }
 
-    func display(_ url: URL) -> String {
+    func location(_ installation: Installation) -> String {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
-        return url.path.hasPrefix(home) ? "~" + url.path.dropFirst(home.count) : url.path
+        let path = installation.dir.path.hasPrefix(home) ? "~" + installation.dir.path.dropFirst(home.count) : installation.dir.path
+        return installation.isSymlink ? path + " (link)" : path
+    }
+}
+
+private struct InfoRow: View {
+    let label: String
+    let value: String
+    var monospaced = false
+
+    var body: some View {
+        HStack {
+            Text(label).font(.system(size: 13)).foregroundStyle(.secondary)
+            Spacer(minLength: 12)
+            Text(value)
+                .font(monospaced ? .system(size: 12, design: .monospaced) : .system(size: 13))
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .textSelection(.enabled)
+        }
+        .padding(.horizontal, 12)
+        .frame(minHeight: 34)
     }
 }

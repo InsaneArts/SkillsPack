@@ -1,21 +1,28 @@
 import SkillsPackCore
 import SwiftUI
 
-enum SkillFilter: String, CaseIterable, Identifiable {
-    case all = "All skills"
+enum AgentFilter: String, CaseIterable, Identifiable {
+    case all = "All"
     case claude = "Claude"
     case codex = "Codex"
     case pi = "pi"
-    case off = "Turned off"
-    case unused = "Never used"
-    case updates = "Updates"
+
+    var id: String { rawValue }
+    var agent: Agent? { Agent(rawValue: rawValue.lowercased()) }
+}
+
+enum StatusFilter: String, CaseIterable, Identifiable {
+    case any = "All Skills"
+    case off = "Turned Off"
+    case unused = "Never Used"
+    case updates = "Updates Available"
 
     var id: String { rawValue }
 }
 
 enum SkillSort: String, CaseIterable, Identifiable {
-    case usage = "Most used"
-    case recent = "Recently used"
+    case usage = "Most Used"
+    case recent = "Recently Used"
     case name = "Name"
 
     var id: String { rawValue }
@@ -25,7 +32,8 @@ struct SkillListView: View {
     @Environment(SkillStore.self) private var store
     @Binding var route: Route
     @State private var query = ""
-    @State private var filter = SkillFilter.all
+    @State private var agentFilter = AgentFilter.all
+    @State private var status = StatusFilter.any
     @State private var sort = SkillSort.usage
 
     var visible: [Skill] {
@@ -33,11 +41,9 @@ struct SkillListView: View {
         let filtered = store.skills.filter { skill in
             let text = (skill.name + " " + skill.description).lowercased()
             guard words.allSatisfy({ text.contains($0) }) else { return false }
-            switch filter {
-            case .all: return true
-            case .claude: return !skill.installations(for: .claude).isEmpty
-            case .codex: return !skill.installations(for: .codex).isEmpty
-            case .pi: return !skill.installations(for: .pi).isEmpty
+            if let agent = agentFilter.agent, skill.installations(for: agent).isEmpty { return false }
+            switch status {
+            case .any: return true
             case .off: return Agent.allCases.contains { store.state(skill, $0) == .off }
             case .unused: return store.usage(of: skill).total == 0
             case .updates: return store.updates.contains(skill.name)
@@ -45,6 +51,7 @@ struct SkillListView: View {
         }
         switch sort {
         case .usage:
+            // Most used first, then by name.
             return filtered.sorted { (store.usage(of: $0).total, $1.name) > (store.usage(of: $1).total, $0.name) }
         case .recent:
             return filtered.sorted { (store.usage(of: $0).lastUsed ?? .distantPast) > (store.usage(of: $1).lastUsed ?? .distantPast) }
@@ -56,112 +63,208 @@ struct SkillListView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            Divider()
             let skills = visible
             if skills.isEmpty {
-                ContentUnavailableView(store.skills.isEmpty ? "Loading skills" : "No matching skills", systemImage: "shippingbox")
-                    .frame(maxHeight: .infinity)
-            } else {
-                List(skills) { skill in
-                    SkillRow(skill: skill)
-                        .contentShape(Rectangle())
-                        .onTapGesture { route = .detail(skill.name) }
+                ContentUnavailableView {
+                    Label(store.skills.isEmpty ? "Loading Skills" : "No Skills", systemImage: "shippingbox")
+                } description: {
+                    if !store.skills.isEmpty { Text("Try another search or filter.") }
                 }
-                .listStyle(.plain)
+                .frame(maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        if !store.updates.isEmpty, status == .any, query.isEmpty {
+                            updatesBanner
+                        }
+                        ForEach(skills) { skill in
+                            SkillRow(skill: skill) { route = .detail(skill.name) }
+                        }
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 56)
+                }
+                .scrollIndicators(.never)
             }
-            StatusBar()
-            Divider()
-            footer
         }
     }
 
     var header: some View {
-        HStack(spacing: 8) {
-            TextField("Search \(store.skills.count) skills", text: $query)
-                .textFieldStyle(.roundedBorder)
-            Picker("Filter", selection: $filter) {
-                ForEach(SkillFilter.allCases) { Text($0.rawValue).tag($0) }
-            }
-            .labelsHidden()
-            .fixedSize()
-            Menu {
-                Picker("Sort", selection: $sort) {
-                    ForEach(SkillSort.allCases) { Text($0.rawValue).tag($0) }
+        VStack(spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Skills").font(.system(size: 20, weight: .bold))
+                    subtitle
                 }
-                .pickerStyle(.inline)
-            } label: {
-                Image(systemName: "arrow.up.arrow.down")
+                Spacer()
+                HStack(spacing: 6) {
+                    CircleButton(systemImage: "plus", help: "Add skills from a URL") { route = .install }
+                    moreMenu
+                }
             }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
-            .help("Sort")
-            Button {
-                Task { await store.checkUpdates() }
-            } label: {
-                Image(systemName: "arrow.triangle.2.circlepath")
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                TextField("Search", text: $query).textFieldStyle(.plain)
+                if !query.isEmpty {
+                    Button { query = "" } label: { Image(systemName: "xmark.circle.fill") }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.tertiary)
+                }
             }
-            .buttonStyle(.borderless)
-            .disabled(store.isCheckingUpdates)
-            .help("Check for updates")
-            Button {
-                route = .install
-            } label: {
-                Image(systemName: "plus")
+            .font(.system(size: 13))
+            .padding(.horizontal, 8)
+            .frame(height: 28)
+            .background(.fill.tertiary, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            Picker("Agent", selection: $agentFilter) {
+                ForEach(AgentFilter.allCases) { Text($0.rawValue).tag($0) }
             }
-            .buttonStyle(.borderless)
-            .help("Install from URL")
+            .pickerStyle(.segmented)
+            .labelsHidden()
         }
-        .padding(10)
+        .padding(.horizontal, 16)
+        .padding(.top, 14)
+        .padding(.bottom, 10)
     }
 
-    var footer: some View {
-        HStack(spacing: 8) {
+    @ViewBuilder
+    var subtitle: some View {
+        HStack(spacing: 5) {
             if store.isCheckingUpdates {
-                ProgressView().controlSize(.small)
-                Text("Checking sources for updates…")
+                ProgressView().controlSize(.mini)
+                Text("Checking for updates…")
             } else if store.isCountingUsage {
-                ProgressView().controlSize(.small)
-                Text("Counting usage in session logs…")
+                ProgressView().controlSize(.mini)
+                Text("Counting usage…")
             } else {
-                Text("Usage: called by you + by the agent")
+                let off = store.skills.filter { skill in Agent.allCases.contains { store.state(skill, $0) == .off } }.count
+                Text("\(store.skills.count) installed" + (off > 0 ? " · \(off) turned off" : ""))
             }
-            Spacer()
-            Button("Quit") { NSApplication.shared.terminate(nil) }
-                .buttonStyle(.borderless)
         }
-        .font(.caption)
+        .font(.system(size: 11))
         .foregroundStyle(.secondary)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 7)
+    }
+
+    var moreMenu: some View {
+        Menu {
+            Picker("Show", selection: $status) {
+                ForEach(StatusFilter.allCases) { Text($0.rawValue).tag($0) }
+            }
+            Picker("Sort By", selection: $sort) {
+                ForEach(SkillSort.allCases) { Text($0.rawValue).tag($0) }
+            }
+            Divider()
+            Button("Check for Updates") { Task { await store.checkUpdates() } }
+                .disabled(store.isCheckingUpdates)
+            Button("Recount Usage") { Task { await store.countUsage() } }
+                .disabled(store.isCountingUsage)
+            Divider()
+            Button("Quit SkillsPack") { NSApplication.shared.terminate(nil) }
+                .keyboardShortcut("q")
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 12, weight: .semibold))
+                .frame(width: 26, height: 26)
+                .background(.fill.tertiary, in: Circle())
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+    }
+
+    var updatesBanner: some View {
+        Button {
+            status = .updates
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "arrow.down.circle.fill").font(.system(size: 20)).foregroundStyle(.blue)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("\(store.updates.count) \(store.updates.count == 1 ? "Update" : "Updates") Available").font(.system(size: 13, weight: .medium))
+                    Text("Show skills with a newer version at their source.").font(.system(size: 11)).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right").font(.system(size: 11, weight: .semibold)).foregroundStyle(.tertiary)
+            }
+            .padding(10)
+            .background(.blue.opacity(0.1), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.bottom, 6)
+    }
+}
+
+struct CircleButton: View {
+    let systemImage: String
+    let help: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 12, weight: .semibold))
+                .frame(width: 26, height: 26)
+                .background(.fill.tertiary, in: Circle())
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .help(help)
     }
 }
 
 struct SkillRow: View {
     @Environment(SkillStore.self) private var store
     let skill: Skill
+    let open: () -> Void
 
     var body: some View {
         let usage = store.usage(of: skill)
-        HStack(spacing: 8) {
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 4) {
-                    Text(skill.name).fontWeight(.medium).lineLimit(1)
-                    if store.updates.contains(skill.name) {
-                        Image(systemName: "arrow.up.circle.fill").foregroundStyle(.blue).help("Update available")
+        Button(action: open) {
+            HStack(spacing: 10) {
+                SkillIcon(name: skill.name, size: 30)
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 5) {
+                        Text(skill.name).font(.system(size: 13, weight: .medium)).lineLimit(1)
+                        if store.updates.contains(skill.name) {
+                            Text("UPDATE")
+                                .font(.system(size: 8, weight: .bold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 1.5)
+                                .background(.blue, in: Capsule())
+                        }
                     }
+                    Text(skill.description).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
                 }
-                Text(skill.description).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                Spacer(minLength: 6)
+                VStack(alignment: .trailing, spacing: 4) {
+                    AgentDots(skill: skill)
+                    Text(usage.total == 0 ? "Unused" : "\(usage.total) \(usage.total == 1 ? "use" : "uses")")
+                        .font(.system(size: 10).monospacedDigit())
+                        .foregroundStyle(.tertiary)
+                }
             }
-            Spacer(minLength: 4)
-            Text("\(usage.total)")
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(usage.total == 0 ? .tertiary : .secondary)
-                .frame(minWidth: 22, alignment: .trailing)
-                .help("Used \(usage.total) times: \(usage.byUser) by you, \(usage.byAgent) by the agent")
-            HStack(spacing: 3) {
-                ForEach(Agent.allCases, id: \.self) { AgentChip(skill: skill, agent: $0) }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .hoverHighlight()
+        .contextMenu { contextMenu }
+    }
+
+    @ViewBuilder
+    var contextMenu: some View {
+        ForEach(Agent.allCases, id: \.self) { agent in
+            switch store.state(skill, agent) {
+            case .on: Button("Turn Off in \(agent.title)") { Task { await store.toggle(skill, agent) } }
+            case .off: Button("Turn On in \(agent.title)") { Task { await store.toggle(skill, agent) } }
+            case .notInstalled: Button("Install for \(agent.title)") { Task { await store.toggle(skill, agent) } }
             }
         }
-        .padding(.vertical, 2)
+        if let first = skill.installations.first {
+            Divider()
+            Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([first.skillFile]) }
+        }
     }
 }

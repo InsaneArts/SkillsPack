@@ -14,6 +14,8 @@ final class SkillStore {
     private(set) var updates: Set<String> = []
     private(set) var issues: [HealthIssue] = []
     private(set) var repos: [String] = []
+    /// What "Turn All Off" switched off, by scope ("all" or an agent), as "agent|skill".
+    private(set) var turnedOff: [String: [String]] = [:]
     private(set) var isCountingUsage = false
     private(set) var isCheckingUpdates = false
     var message: String?
@@ -40,6 +42,55 @@ final class SkillStore {
         self.sources = sources
         self.issues = issues
         self.repos = repos
+        turnedOff = (try? JSONDecoder().decode([String: [String]].self, from: Data(contentsOf: turnedOffURL))) ?? [:]
+    }
+
+    // MARK: Turn all off and on
+
+    private var turnedOffURL: URL { paths.appSupport.appending(path: "turned-off.json") }
+
+    private func scopeKey(_ agent: Agent?) -> String { agent?.rawValue ?? "all" }
+
+    /// True when "Turn All Off" ran for this scope and has not been undone.
+    func isAllOff(_ agent: Agent?) -> Bool { turnedOff[scopeKey(agent)] != nil }
+
+    /// Turns off every skill that is on, for one agent or for all of them, and remembers which ones.
+    func turnAllOff(_ agent: Agent?) async {
+        let agents = agent.map { [$0] } ?? Agent.allCases
+        let batches = agents.map { agent in (agent, skills.filter { state($0, agent) == .on }) }
+        let count = batches.reduce(0) { $0 + $1.1.count }
+        var record = turnedOff
+        record[scopeKey(agent)] = batches.flatMap { agent, skills in skills.map { "\(agent.rawValue)|\($0.name)" } }
+        let saved = record
+        let url = turnedOffURL
+        await run("Turned off \(count) skills\(agent.map { " in \($0.title)" } ?? " everywhere").") { paths in
+            let switches = Switches(paths: paths)
+            for (agent, skills) in batches { try switches.setEnabled(false, skills: skills, agent: agent) }
+            try FileManager.default.createDirectory(at: paths.appSupport, withIntermediateDirectories: true)
+            try JSONEncoder().encode(saved).write(to: url, options: .atomic)
+        }
+    }
+
+    /// Turns back on exactly the skills that "Turn All Off" turned off. Skills that were already off stay off.
+    func turnAllOn(_ agent: Agent?) async {
+        let key = scopeKey(agent)
+        let entries = turnedOff[key] ?? []
+        let byName = Dictionary(skills.map { ($0.name, $0) }, uniquingKeysWith: { first, _ in first })
+        let batches = Agent.allCases.map { agent in
+            (agent, entries.compactMap { entry -> Skill? in
+                let parts = entry.split(separator: "|", maxSplits: 1).map(String.init)
+                return parts.count == 2 && parts[0] == agent.rawValue ? byName[parts[1]] : nil
+            })
+        }
+        var record = turnedOff
+        record[key] = nil
+        let saved = record
+        let url = turnedOffURL
+        await run("Turned \(entries.count) skills back on.") { paths in
+            let switches = Switches(paths: paths)
+            for (agent, skills) in batches { try switches.setEnabled(true, skills: skills, agent: agent) }
+            try JSONEncoder().encode(saved).write(to: url, options: .atomic)
+        }
     }
 
     /// Checks for updates once a day while the app runs.

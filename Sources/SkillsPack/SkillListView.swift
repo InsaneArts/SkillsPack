@@ -131,11 +131,14 @@ struct SkillListView: View {
             .padding(.horizontal, 8)
             .frame(height: 28)
             .background(.fill.tertiary, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            Picker("Agent", selection: $agentFilter) {
-                ForEach(AgentFilter.allCases) { Text($0.rawValue).tag($0) }
+            HStack(spacing: 8) {
+                Picker("Agent", selection: $agentFilter) {
+                    ForEach(AgentFilter.allCases) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                masterSwitch
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
         }
         .padding(.horizontal, 16)
         .padding(.top, 14)
@@ -158,6 +161,24 @@ struct SkillListView: View {
         }
         .font(.system(size: 11))
         .foregroundStyle(.secondary)
+    }
+
+    /// Turns every skill off for the selected agents, then back on again.
+    var masterSwitch: some View {
+        let agent = agentFilter.agent
+        let allOff = store.isAllOff(agent)
+        return Button {
+            Task { allOff ? await store.turnAllOn(agent) : await store.turnAllOff(agent) }
+        } label: {
+            Label(allOff ? "Turn All On" : "Turn All Off", systemImage: "power")
+                .font(.system(size: 11, weight: .semibold))
+        }
+        .buttonStyle(.bordered)
+        .buttonBorderShape(.capsule)
+        .controlSize(.small)
+        .tint(allOff ? .green : nil)
+        .help(allOff ? "Turn back on the skills that Turn All Off turned off" : "Turn off every skill" + (agent.map { " in \($0.title)" } ?? " in every agent"))
+        .fixedSize()
     }
 
     var moreMenu: some View {

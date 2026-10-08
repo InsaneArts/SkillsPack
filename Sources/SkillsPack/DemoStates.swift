@@ -21,10 +21,22 @@ enum DemoStates {
         await store.countUsage()
 
         func shot(_ name: String, _ view: some View, wait: Double = 0.8) async {
-            await capture(view.environment(store), name: name, size: CGSize(width: 400, height: 600), wait: wait, to: out)
+            await capture(view.environment(store).background(Color(nsColor: .windowBackgroundColor)), name: name, size: CGSize(width: 400, height: 600), wait: wait, to: out)
         }
 
+        let onlyInstall = CommandLine.arguments.contains("--only-install")
+        if !onlyInstall {
         await shot("01-list", RootView(route: .list))
+        await store.turnAllOff(nil)
+        let off = Agent.allCases.map { agent in "\(agent.title) \(store.skills.filter { store.state($0, agent) == .off }.count)" }
+        print("after Turn All Off, off per agent: \(off.joined(separator: ", "))")
+        await shot("01b-list-all-off", RootView(route: .list))
+        store.message = nil
+        await store.turnAllOn(nil)
+        let back = Agent.allCases.map { agent in "\(agent.title) \(store.skills.filter { store.state($0, agent) == .off }.count)" }
+        print("after Turn All On, off per agent: \(back.joined(separator: ", "))")
+        await shot("01c-list-all-on", RootView(route: .list))
+        store.message = nil
         await shot("03-detail-bro", RootView(route: .detail("bro")))
         if let bro = store.skills.first(where: { $0.name == "bro" }) { await store.toggle(bro, .codex) }
         await shot("04-detail-bro-off", RootView(route: .detail("bro")))
@@ -37,6 +49,7 @@ enum DemoStates {
         store.message = nil
         await shot("07b-list-after-fix", RootView(route: .list))
 
+        }
         // The user pastes a link to the skill's folder, as people share skills.
         let url = "https://github.com/tornikegomareli/Skills/tree/main/product-thinking"
         await shot("08-install-empty", InstallView(route: .constant(.install)), wait: 0.4)
@@ -72,6 +85,10 @@ enum DemoStates {
         window.makeKeyAndOrderFront(nil)
         defer { window.orderOut(nil) }
         try? await Task.sleep(for: .seconds(wait))
+        // Another app may have taken focus during a long wait; controls draw grey without it.
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+        try? await Task.sleep(for: .seconds(0.3))
         host.layoutSubtreeIfNeeded()
         guard let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { return }
         host.cacheDisplay(in: host.bounds, to: rep)

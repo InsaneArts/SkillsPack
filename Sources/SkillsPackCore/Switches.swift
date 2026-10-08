@@ -50,10 +50,17 @@ public struct Switches: Sendable {
     }
 
     public func setEnabled(_ enabled: Bool, skill: Skill, agent: Agent) throws {
+        try setEnabled(enabled, skills: [skill], agent: agent)
+    }
+
+    /// Switches many skills for one agent, reading and writing its config file once.
+    public func setEnabled(_ enabled: Bool, skills: [Skill], agent: Agent) throws {
+        let skills = skills.filter { !$0.installations(for: agent).isEmpty }
+        guard !skills.isEmpty else { return }
         switch agent {
-        case .claude: try setClaude(enabled, skill: skill)
-        case .codex: try setCodex(enabled, skill: skill)
-        case .pi: try setPi(enabled, skill: skill)
+        case .claude: try setClaude(enabled, skills: skills)
+        case .codex: try setCodex(enabled, skills: skills)
+        case .pi: try setPi(enabled, skills: skills)
         }
     }
 
@@ -66,14 +73,19 @@ public struct Switches: Sendable {
 
     // MARK: Claude
 
-    func setClaude(_ enabled: Bool, skill: Skill) throws {
+    func setClaude(_ enabled: Bool, skills: [Skill]) throws {
         let file = JSONFile(url: paths.claudeSettings)
         let (value, indent, newline) = try file.read()
         var settings = value
         var overrides = settings["skillOverrides"] ?? .object([])
-        let isOff = overrides[skill.name]?.stringValue == "off"
-        guard isOff == enabled else { return } // already in the wanted state
-        overrides.set(skill.name, enabled ? nil : .string("off"))
+        var changed = false
+        for skill in skills {
+            let isOff = overrides[skill.name]?.stringValue == "off"
+            guard isOff == enabled else { continue } // already in the wanted state
+            overrides.set(skill.name, enabled ? nil : .string("off"))
+            changed = true
+        }
+        guard changed else { return }
         settings.set("skillOverrides", overrides.members.isEmpty ? nil : overrides)
         try Backup(paths: paths).save(paths.claudeSettings, label: "claude")
         try file.write(settings, indent: indent, trailingNewline: newline)
@@ -88,11 +100,13 @@ public struct Switches: Sendable {
         return skill.installations(for: .codex).contains { canonical($0.skillFile.path) == target }
     }
 
-    func setCodex(_ enabled: Bool, skill: Skill) throws {
+    func setCodex(_ enabled: Bool, skills: [Skill]) throws {
         let text = (try? String(contentsOf: paths.codexConfig, encoding: .utf8)) ?? ""
         var config = CodexConfig(text: text)
-        config.removeBlocks { codexBlock($0, matches: skill) }
-        if !enabled { try config.appendDisabled(name: skill.name) }
+        config.removeBlocks { block in skills.contains { codexBlock(block, matches: $0) } }
+        if !enabled {
+            for skill in skills { try config.appendDisabled(name: skill.name) }
+        }
         guard config.text != text else { return }
         try Backup(paths: paths).save(paths.codexConfig, label: "codex")
         try FileManager.default.createDirectory(at: paths.codexConfig.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -124,8 +138,8 @@ public struct Switches: Sendable {
         }
     }
 
-    func setPi(_ enabled: Bool, skill: Skill) throws {
-        let installations = skill.installations(for: .pi)
+    func setPi(_ enabled: Bool, skills: [Skill]) throws {
+        let installations = skills.flatMap { $0.installations(for: .pi) }
         let file = JSONFile(url: paths.piSettings)
         let (value, indent, newline) = try file.read()
         var settings = value

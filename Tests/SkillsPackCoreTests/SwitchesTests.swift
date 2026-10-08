@@ -120,6 +120,33 @@ import Testing
         #expect(switches.state(of: skill, for: .pi, in: switches.snapshot()) == .on)
     }
 
+    @Test func batchOffAndOnRestoresEveryFile() throws {
+        let home = try TempHome()
+        let paths = home.paths
+        for name in ["one", "two", "three"] {
+            try home.skill(name, in: paths.claudeSkills)
+            try home.skill(name, in: paths.codexSkills)
+            try home.skill(name, in: paths.piSkills)
+        }
+        let claude = "{\n  \"model\": \"opus\"\n}\n"
+        let codex = "model = \"gpt-5\"\n\n[projects.\"/x\"]\ntrust_level = \"trusted\"\n"
+        let pi = "{\n  \"theme\": \"dark\"\n}\n"
+        try home.write(claude, to: paths.claudeSettings)
+        try home.write(codex, to: paths.codexConfig)
+        try home.write(pi, to: paths.piSettings)
+        let skills = Scanner(paths: paths).scan()
+        let switches = Switches(paths: paths)
+
+        for agent in Agent.allCases { try switches.setEnabled(false, skills: skills, agent: agent) }
+        let snapshot = switches.snapshot()
+        #expect(skills.allSatisfy { skill in Agent.allCases.allSatisfy { switches.state(of: skill, for: $0, in: snapshot) == .off } })
+
+        for agent in Agent.allCases { try switches.setEnabled(true, skills: skills, agent: agent) }
+        #expect(home.read(paths.claudeSettings) == claude)
+        #expect(home.read(paths.codexConfig) == codex)
+        #expect(home.read(paths.piSettings) == pi)
+    }
+
     @Test func backupIsWrittenBeforeChanges() throws {
         let home = try TempHome()
         try home.skill("bro", in: home.paths.claudeSkills)

@@ -14,9 +14,9 @@ const PANEL = { x: ICON.x - 200, y: 28, w: 400, h: 600 };
 
 // Beat times (seconds). The same table drives picture and sound.
 const T = {
-  open: 0.5, bro: 2.2, codex: 3.9, back1: 5.6, banner: 6.9, fix: 8.3, back2: 9.9,
-  plus: 11.0, field: 12.1, paste: 12.6, find: 13.5, found: 14.6, install: 16.0, wide: 16.35, rest: 17.2, card: 19.3,
-  toastGone: 19.06, // the app hides a toast 3 s after it appears
+  open: 0.5, allOff: 1.9, allOn: 3.6, bro: 5.0, codex: 6.7, back1: 8.4, banner: 9.7, fix: 11.1, back2: 12.7,
+  plus: 13.8, field: 14.9, paste: 15.4, find: 16.3, found: 17.4, install: 18.8, wide: 19.15, rest: 20.0, card: 22.1,
+  toastGone: 21.86, // the app hides a toast 3 s after it appears
 };
 
 // Panel point → screen point.
@@ -25,11 +25,11 @@ const P = (x, y) => ({ x: PANEL.x + x, y: PANEL.y + y });
 // Camera framings, each from its start time: [time, zoom, focus]. Moves take 0.9 s.
 const SHOTS = [
   [0, 1.6, { x: ICON.x - 120, y: 0 }], // the menu bar icon and the cursor
-  [T.open + 0.1, 1.6, P(200, 270)], // the list
+  [T.open + 0.1, 1.5, P(200, 290)], // the list, from the title down to its toasts
   [T.bro + 0.1, 2.0, P(200, 365)], // the switches and the toast below them
-  [T.back1 + 0.1, 1.6, P(200, 270)], // the list with the problem banner
+  [T.back1 + 0.1, 1.5, P(200, 290)], // the list with the problem banner
   [T.banner + 0.1, 2.0, P(200, 230)], // the problem and the Fix button
-  [T.back2 + 0.1, 1.6, P(200, 270)], // the list and the + button
+  [T.back2 + 0.1, 1.5, P(200, 290)], // the list and the + button
   [T.plus + 0.1, 1.9, P(200, 170)], // the Add Skills header and the URL field
   [T.find + 0.1, 1.9, P(200, 350)], // the URL field down to the Install button
   [T.wide, 1.35, { x: SCREEN.w, y: 0 }], // the panel on the right, room for the end card
@@ -39,6 +39,8 @@ const MOVE = 0.9;
 // Each click: when, and where the cursor is when it clicks (screen points).
 const CLICKS = [
   { t: T.open, at: ICON },
+  { t: T.allOff, at: P(341, 113) },
+  { t: T.allOn, at: P(341, 113) },
   { t: T.bro, at: P(150, 432) },
   { t: T.codex, at: P(350, 337) },
   { t: T.back1, at: P(34, 20) },
@@ -56,7 +58,7 @@ const CURSOR_START = { x: ICON.x - 64, y: 58 };
 
 // Which app screen shows from which time. The app swaps screens in about a tenth of a second.
 const STATES = [
-  [T.open, "list"], [T.bro + 0.06, "detail"], [T.codex + 0.06, "detailOff", { blend: [322, 318, 56, 38], dur: 0.2 }], [T.back1 + 0.06, "listAfterToggle"],
+  [T.open, "list"], [T.allOff + 0.06, "listAllOff"], [T.allOn + 0.06, "listAllOn"], [T.bro + 0.06, "detail"], [T.codex + 0.06, "detailOff", { blend: [322, 318, 56, 38], dur: 0.2 }], [T.back1 + 0.06, "listAfterToggle"],
   [T.banner + 0.06, "health"], [T.fix + 0.06, "healthFixed"], [T.back2 + 0.06, "listAfterFix"],
   [T.plus + 0.06, "installEmpty"], [T.paste, "installPasted"], [T.find + 0.06, "installFinding"],
   [T.found, "installFound"], [T.install + 0.06, "listInstalled"], [T.toastGone, "listFinal"],
@@ -65,13 +67,16 @@ const STATES = [
 const FONT = `-apple-system, "SF Pro Display", "Helvetica Neue", sans-serif`;
 
 export default {
-  duration: 23,
+  duration: 25.8,
   fps: 60,
   formats: ["wide"],
-  poster: 22.9,
+  poster: 25.7,
   assets: {
     menubar: "assets/menubar-white.png",
+    wallpaper: "assets/wallpaper.jpg",
     list: "assets/ui/01-list.png",
+    listAllOff: "assets/ui/01b-list-all-off.png",
+    listAllOn: "assets/ui/01c-list-all-on.png",
     detail: "assets/ui/03-detail-bro.png",
     detailOff: "assets/ui/04-detail-bro-off.png",
     listAfterToggle: "assets/ui/05-list-after-toggle.png",
@@ -92,7 +97,7 @@ export default {
     // Screen points → film pixels, through the camera.
     ctx.setTransform(cam.z * K, 0, 0, cam.z * K, fmt.w / 2 - cam.fx * cam.z * K, fmt.h / 2 - cam.fy * cam.z * K);
 
-    wallpaper(ctx);
+    ctx.drawImage(assets.wallpaper, 0, 0, SCREEN.w, SCREEN.h); // the user's own desktop picture
     const open = panelOpen(t);
     if (open > 0) statusHighlight(ctx, open);
     ctx.drawImage(assets.menubar, 0, 0, SCREEN.w, 24);
@@ -157,23 +162,6 @@ function camera(t) {
 }
 
 // MARK: Desktop
-
-function wallpaper(ctx) {
-  const { w, h } = SCREEN;
-  const base = ctx.createLinearGradient(0, 0, w, h);
-  base.addColorStop(0, "#0e2747");
-  base.addColorStop(0.55, "#22356f");
-  base.addColorStop(1, "#3a2c63");
-  ctx.fillStyle = base;
-  ctx.fillRect(-w, -h, w * 3, h * 3);
-  for (const [x, y, r, color] of [[260, 760, 760, "rgba(38, 140, 170, 0.45)"], [1380, 140, 700, "rgba(120, 90, 200, 0.35)"], [820, 420, 520, "rgba(70, 110, 220, 0.25)"]]) {
-    const glow = ctx.createRadialGradient(x, y, 0, x, y, r);
-    glow.addColorStop(0, color);
-    glow.addColorStop(1, "rgba(0, 0, 0, 0)");
-    ctx.fillStyle = glow;
-    ctx.fillRect(-w, -h, w * 3, h * 3);
-  }
-}
 
 function statusHighlight(ctx, alpha) {
   ctx.save();
@@ -307,7 +295,7 @@ function endCard(ctx, t, fmt) {
   ctx.fillText("SkillsPack", x, y + h - 150 + (1 - p) * 14);
   ctx.globalAlpha = p * 0.82;
   ctx.font = `400 44px ${FONT}`;
-  const lines = ["Skills for Claude Code, Codex, and pi.", "In your menu bar."];
+  const lines = ["Manage all your agent skills.", "Right from your menu bar."];
   lines.forEach((line, i) => ctx.fillText(line, x + 3, y + h - 66 + i * 56 + (1 - p) * 14));
   ctx.restore();
 }

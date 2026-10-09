@@ -16,11 +16,8 @@
 </p>
 
 Claude Code, Codex and pi each keep their own skills in their own folders, with their own way to
-turn one off. SkillsPack reads all of them and shows them in one list: which agents have each
+turn one off. SkillsPack reads all of them and shows them in one list which agents have each
 skill, whether it is on, and how often you and your agents used it.
-
-It changes nothing it does not have to. Turning a skill off writes the agent's own setting, so
-files never move, and every config file is backed up before SkillsPack touches it.
 
 ## See every skill
 
@@ -38,20 +35,6 @@ switch per agent.
   <img src="docs/assets/health.png" width="30%" alt="Health: a broken link, the context each agent loads, and skills unused for 90 days" />
 </p>
 
-## Turn skills on and off
-
-| Agent | Skill folders it reads | Switch SkillsPack writes |
-|---|---|---|
-| Claude Code | `~/.claude/skills`, Claude plugins | `"skillOverrides": {"<name>": "off"}` in `~/.claude/settings.json` |
-| Codex | `~/.codex/skills`, `~/.agents/skills` | `[[skills.config]]` with `name` and `enabled = false` in `~/.codex/config.toml` |
-| pi | `~/.pi/agent/skills`, `~/.agents/skills` | `"-<path>/SKILL.md"` in the `skills` array of `~/.pi/agent/settings.json` |
-
-Turning a skill back on removes the entry, so the file returns to exactly what it was. SkillsPack
-keeps the key order and formatting of these files. **Turn All Off** switches off every skill for
-the selected agents in one write per file; **Turn All On** restores exactly the ones it changed.
-
-A dashed agent on a skill means that agent does not have it. One click copies it there.
-
 ## Fix what is broken
 
 Health finds broken symlinks, skills sitting in a folder no agent reads (such as `~/.pi/skills`)
@@ -68,8 +51,6 @@ SkillsPack clones it, lists the skills inside, and copies the ones you pick into
 folder. It records where each skill came from, so **Check Skills for Updates** can compare your
 copy with the source. Skills installed with `npx skills` keep their source too, and skills from
 Claude plugins update through `claude plugin update`.
-
-Skills with no known source can be matched by name against repositories you add in Health.
 
 ## Install
 
@@ -89,34 +70,7 @@ curl -fsSL https://raw.githubusercontent.com/InsaneArts/SkillsPack/main/install.
 Or grab [**SkillsPack.dmg**](https://github.com/InsaneArts/SkillsPack/releases/latest/download/SkillsPack.dmg)
 from the latest release.
 
-Requirements: macOS 14 or newer on Apple Silicon. SkillsPack needs no permissions; it reads and
-writes files in your home folder.
-
-Updates arrive through the app. It checks once a day, and every update is verified against an
-EdDSA signature before it installs. The menu's **Check for SkillsPack Updates…** checks now.
-
-## Remove
-
-```sh
-brew uninstall --cask skillspack                                   # if installed with Homebrew
-curl -fsSL https://raw.githubusercontent.com/InsaneArts/SkillsPack/main/install.sh | bash -s -- --uninstall
-```
-
-Or quit SkillsPack and drag it to the Trash. Your agents' skills and settings stay as they are.
-SkillsPack's own data in `~/Library/Application Support/SkillsPack` stays too; delete it for a
-clean slate.
-
-## Files
-
-SkillsPack keeps its own data in `~/Library/Application Support/SkillsPack`:
-
-- `sources.json`: where each installed skill came from.
-- `repos.json`: the repositories used to match sources.
-- `turned-off.json`: what **Turn All Off** changed, so **Turn All On** can restore it.
-- `usage-cache.json`: usage counts per session log, so only new logs are read again.
-- `backups/`: the 20 newest copies of each agent config file before SkillsPack changed it.
-
-## Development
+## Build
 
 ```sh
 git clone https://github.com/InsaneArts/SkillsPack.git
@@ -125,17 +79,6 @@ swift build
 swift test
 Scripts/run.sh       # package build/SkillsPack.app and open it
 ```
-
-`Scripts/package_app.sh` signs with the certificate in `APP_IDENTITY` when it is in your keychain
-and ad-hoc otherwise. `Scripts/make_icon.sh` redraws the app icon from `Scripts/make_icon.swift`.
-
-Releases are cut with `Scripts/release.sh <version>`: it tests, builds, signs with Developer ID,
-notarizes a DMG, signs the Sparkle update, regenerates `appcast.xml`, updates the cask and the
-public tap, and publishes the GitHub release. `Scripts/setup-sparkle-keys.sh` manages the
-update-signing key.
-
-The demo film in [`films/skillspack-demo`](films/skillspack-demo) is rendered from real SkillsPack
-screens; its brief, shot list and reviews are in the same folder.
 
 ## License
 

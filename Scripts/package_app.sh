@@ -16,6 +16,9 @@ APP="$ROOT/build/$APP_NAME.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
 cp "$BIN" "$APP/Contents/MacOS/$APP_NAME"
+# SwiftPM resource bundles (the agent logos) sit next to the binary; Bundle.module finds them in Resources.
+mkdir -p "$APP/Contents/Resources"
+cp -R "$(dirname "$BIN")"/*.bundle "$APP/Contents/Resources/"
 
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>

@@ -10,12 +10,27 @@ extension Agent {
         }
     }
 
-    var symbol: String {
-        switch self {
-        case .claude: "sparkle"
-        case .codex: "chevron.left.forwardslash.chevron.right"
-        case .pi: "terminal"
+    /// The agent's own app icon: Claude from Claude.app, Codex from ChatGPT.app, pi from pi.dev.
+    var logo: NSImage? {
+        Bundle.module.url(forResource: rawValue, withExtension: "png", subdirectory: "AgentLogos").flatMap(NSImage.init(contentsOf:))
+    }
+}
+
+/// An agent's app icon. The icons carry the usual macOS transparent margin, so they draw a little larger than `size`.
+struct AgentLogo: View {
+    let agent: Agent
+    var size: CGFloat = 26
+
+    var body: some View {
+        Group {
+            if let logo = agent.logo {
+                Image(nsImage: logo).resizable().interpolation(.high)
+            } else {
+                RoundedRectangle(cornerRadius: size * 0.27, style: .continuous).fill(agent.color.gradient)
+            }
         }
+        .frame(width: size * 1.2, height: size * 1.2)
+        .frame(width: size, height: size)
     }
 }
 

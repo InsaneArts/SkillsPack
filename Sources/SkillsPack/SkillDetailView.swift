@@ -298,10 +298,7 @@ private struct AgentRow: View {
         let state = store.state(skill, agent)
         let installations = skill.installations(for: agent)
         HStack(spacing: 10) {
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(agent.color.gradient)
-                .frame(width: 26, height: 26)
-                .overlay { Image(systemName: agent.symbol).font(.system(size: 11, weight: .bold)).foregroundStyle(.white) }
+            AgentLogo(agent: agent)
             VStack(alignment: .leading, spacing: 1) {
                 Text(agent.title).font(.system(size: 13))
                 Text(installations.first.map { location($0) } ?? "Not installed")

@@ -145,12 +145,15 @@ struct InstallView: View {
                     Button {
                         if on { agents.remove(agent) } else { agents.insert(agent) }
                     } label: {
-                        HStack(spacing: 5) {
-                            Image(systemName: on ? "checkmark" : agent.symbol).font(.system(size: 10, weight: .bold))
+                        HStack(spacing: 6) {
+                            AgentLogo(agent: agent, size: 16)
+                                .opacity(on ? 1 : 0.45)
                             Text(agent.title).font(.system(size: 12, weight: .medium))
+                            if on { Image(systemName: "checkmark").font(.system(size: 9, weight: .bold)) }
                         }
                         .foregroundStyle(on ? .white : .secondary)
-                        .padding(.horizontal, 12)
+                        .padding(.leading, 6)
+                        .padding(.trailing, 11)
                         .frame(height: 26)
                         .background(on ? AnyShapeStyle(agent.color.gradient) : AnyShapeStyle(.fill.tertiary), in: Capsule())
                         .contentShape(Capsule())

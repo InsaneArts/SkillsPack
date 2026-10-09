@@ -6,7 +6,7 @@ let package = Package(
     platforms: [.macOS(.v14)],
     targets: [
         .target(name: "SkillsPackCore"),
-        .executableTarget(name: "SkillsPack", dependencies: ["SkillsPackCore"]),
+        .executableTarget(name: "SkillsPack", dependencies: ["SkillsPackCore"], resources: [.copy("Resources/AgentLogos")]),
         .testTarget(name: "SkillsPackCoreTests", dependencies: ["SkillsPackCore"]),
     ]
 )

@@ -2,7 +2,7 @@ cask "skillspack" do
   version "0.1.0"
   # Scripts/release.sh rewrites version and sha256 on every release. Until the first release
   # the checksum is a placeholder and the download URL does not resolve.
-  sha256 "0000000000000000000000000000000000000000000000000000000000000000"
+  sha256 "361a2a71d76addd490483482cfbb891560e506755bc145dd56ab8c130f903a68"
 
   url "https://github.com/InsaneArts/SkillsPack/releases/download/v#{version}/SkillsPack.dmg"
   name "SkillsPack"

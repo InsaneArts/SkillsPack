@@ -191,11 +191,14 @@ struct SkillListView: View {
             }
             Divider()
             Button("Health and Context") { route = .health }
-            Button("Check for Updates") { Task { await store.checkUpdates() } }
+            Button("Check Skills for Updates") { Task { await store.checkUpdates() } }
                 .disabled(store.isCheckingUpdates)
             Button("Recount Usage") { Task { await store.countUsage() } }
                 .disabled(store.isCountingUsage)
             Divider()
+            if UpdaterService.shared.isAvailable {
+                Button("Check for SkillsPack Updates…") { UpdaterService.shared.checkForUpdates() }
+            }
             Button("Quit SkillsPack") { NSApplication.shared.terminate(nil) }
                 .keyboardShortcut("q")
         } label: {

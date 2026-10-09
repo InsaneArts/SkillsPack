@@ -6,6 +6,7 @@ struct SkillsPackApp: App {
     @State private var store = SkillStore()
 
     init() {
+        UpdaterService.shared.start()
         #if DEBUG
         if let index = CommandLine.arguments.firstIndex(of: "--snapshot"), index + 1 < CommandLine.arguments.count {
             let dir = URL(filePath: CommandLine.arguments[index + 1])
